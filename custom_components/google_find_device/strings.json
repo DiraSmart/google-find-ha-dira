@@ -3,22 +3,33 @@
     "step": {
       "user": {
         "title": "Google Find My Device",
-        "description": "Enter your Google account credentials. You need an App Password (not your regular password). Go to myaccount.google.com > Security > 2-Step Verification > App passwords to create one.",
+        "description": "Choose your authentication method. Master Token is recommended - run get_token.py on your PC first to obtain it.",
+        "data": {
+          "auth_method": "Authentication Method"
+        }
+      },
+      "app_password": {
+        "title": "App Password Login",
+        "description": "Enter your Google credentials. You need an App Password from myaccount.google.com > Security > App passwords. Warning: This method may not work for all accounts.",
         "data": {
           "email": "Google Email",
           "app_password": "App Password",
           "poll_interval": "Update interval (seconds)"
-        },
-        "data_description": {
-          "email": "Your Google account email address",
-          "app_password": "App-specific password generated from your Google account",
-          "poll_interval": "How often to refresh device locations (60-3600 seconds)"
+        }
+      },
+      "master_token": {
+        "title": "Master Token Login",
+        "description": "Run the get_token.py script on your PC to obtain a master token, then paste it here. See the README for instructions.",
+        "data": {
+          "email": "Google Email",
+          "master_token": "Master Token",
+          "poll_interval": "Update interval (seconds)"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid credentials. Make sure you're using an App Password, not your regular password.",
-      "unknown": "An unexpected error occurred. Check the Home Assistant logs for details."
+      "invalid_auth": "Authentication failed. Check your credentials and try again.",
+      "unknown": "Unexpected error. Check Home Assistant logs."
     },
     "abort": {
       "already_configured": "This Google account is already configured."

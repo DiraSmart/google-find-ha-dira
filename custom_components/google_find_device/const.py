@@ -4,6 +4,8 @@ DOMAIN = "google_find_device"
 
 CONF_EMAIL = "email"
 CONF_APP_PASSWORD = "app_password"
+CONF_MASTER_TOKEN = "master_token"
+CONF_AUTH_METHOD = "auth_method"
 CONF_POLL_INTERVAL = "poll_interval"
 
 DEFAULT_POLL_INTERVAL = 300  # 5 minutes

@@ -3,22 +3,33 @@
     "step": {
       "user": {
         "title": "Google Find My Device",
-        "description": "Ingresa las credenciales de tu cuenta Google. Necesitas una Contrase\u00f1a de Aplicaci\u00f3n (no tu contrase\u00f1a normal). Ve a myaccount.google.com > Seguridad > Verificaci\u00f3n en 2 pasos > Contrase\u00f1as de aplicaciones para crear una.",
+        "description": "Elige el m\u00e9todo de autenticaci\u00f3n. Master Token es recomendado - ejecuta get_token.py en tu PC primero para obtenerlo.",
+        "data": {
+          "auth_method": "M\u00e9todo de autenticaci\u00f3n"
+        }
+      },
+      "app_password": {
+        "title": "Login con App Password",
+        "description": "Ingresa tus credenciales de Google. Necesitas una App Password de myaccount.google.com > Seguridad > Contrase\u00f1as de aplicaciones. Advertencia: Este m\u00e9todo puede no funcionar en todas las cuentas.",
         "data": {
           "email": "Correo de Google",
-          "app_password": "Contrase\u00f1a de Aplicaci\u00f3n",
+          "app_password": "App Password",
           "poll_interval": "Intervalo de actualizaci\u00f3n (segundos)"
-        },
-        "data_description": {
-          "email": "Tu direcci\u00f3n de correo de Google",
-          "app_password": "Contrase\u00f1a espec\u00edfica de aplicaci\u00f3n generada desde tu cuenta Google",
-          "poll_interval": "Cada cu\u00e1nto actualizar la ubicaci\u00f3n de los dispositivos (60-3600 segundos)"
+        }
+      },
+      "master_token": {
+        "title": "Login con Master Token",
+        "description": "Ejecuta el script get_token.py en tu PC para obtener un master token, luego p\u00e9galo aqu\u00ed. Consulta el README para instrucciones.",
+        "data": {
+          "email": "Correo de Google",
+          "master_token": "Master Token",
+          "poll_interval": "Intervalo de actualizaci\u00f3n (segundos)"
         }
       }
     },
     "error": {
-      "invalid_auth": "Credenciales inv\u00e1lidas. Aseg\u00farate de usar una Contrase\u00f1a de Aplicaci\u00f3n, no tu contrase\u00f1a normal.",
-      "unknown": "Ocurri\u00f3 un error inesperado. Revisa los logs de Home Assistant para m\u00e1s detalles."
+      "invalid_auth": "Autenticaci\u00f3n fallida. Verifica tus credenciales e intenta de nuevo.",
+      "unknown": "Error inesperado. Revisa los logs de Home Assistant."
     },
     "abort": {
       "already_configured": "Esta cuenta de Google ya est\u00e1 configurada."
