@@ -4,6 +4,8 @@ Handles authentication (GCM checkin + gpsoauth) and Nova API calls
 for listing devices, ringing, and locating.
 """
 
+from __future__ import annotations
+
 import binascii
 import logging
 import time

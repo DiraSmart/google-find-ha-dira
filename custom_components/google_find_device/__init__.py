@@ -4,17 +4,16 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .api import GoogleFindDeviceAPI
+from .api import AuthenticationError, GoogleFindDeviceAPI
 from .const import CONF_APP_PASSWORD, CONF_EMAIL, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN, PLATFORMS
 from .coordinator import GoogleFindDeviceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-type GoogleFindDeviceConfigEntry = ConfigEntry
 
-
-async def async_setup_entry(hass: HomeAssistant, entry: GoogleFindDeviceConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Google Find My Device from a config entry."""
     email = entry.data[CONF_EMAIL]
     app_password = entry.data[CONF_APP_PASSWORD]
@@ -24,9 +23,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GoogleFindDeviceConfigEn
 
     try:
         await api.authenticate(hass)
+    except AuthenticationError as err:
+        raise ConfigEntryNotReady(f"Authentication failed: {err}") from err
     except Exception as err:
-        _LOGGER.error("Failed to authenticate with Google: %s", err)
-        raise
+        raise ConfigEntryNotReady(f"Setup failed: {err}") from err
 
     coordinator = GoogleFindDeviceCoordinator(hass, api, poll_interval)
 
@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GoogleFindDeviceConfigEn
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: GoogleFindDeviceConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

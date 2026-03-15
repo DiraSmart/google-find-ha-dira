@@ -1,10 +1,13 @@
 """Device tracker platform for Google Find My Device."""
 
+from __future__ import annotations
+
 import logging
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -31,7 +34,6 @@ async def async_setup_entry(
 
     async_add_entities(entities, True)
 
-    # Track new devices that appear in future updates
     known_devices = set(coordinator.data.keys()) if coordinator.data else set()
 
     @callback
@@ -43,9 +45,9 @@ async def async_setup_entry(
         if new_devices:
             new_entities = []
             for device_id in new_devices:
-                device_info = coordinator.data[device_id]
+                info = coordinator.data[device_id]
                 new_entities.append(
-                    GoogleFindDeviceTracker(coordinator, device_id, device_info)
+                    GoogleFindDeviceTracker(coordinator, device_id, info)
                 )
                 known_devices.add(device_id)
 
@@ -65,19 +67,19 @@ class GoogleFindDeviceTracker(CoordinatorEntity, TrackerEntity):
         coordinator: GoogleFindDeviceCoordinator,
         device_id: str,
         device_info: dict,
-    ):
+    ) -> None:
         super().__init__(coordinator)
         self._device_id = device_id
         self._device_info = device_info
         self._attr_unique_id = f"google_find_{device_id}"
         self._attr_name = device_info.get("name", "Unknown Device")
-        device_type = "Android" if device_info.get("device_type") == 1 else "Tracker"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device_id)},
-            "name": device_info.get("name", "Unknown Device"),
-            "manufacturer": "Google",
-            "model": device_info.get("model", device_type),
-        }
+        device_type_str = "Android" if device_info.get("device_type") == 1 else "Tracker"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_info.get("name", "Unknown Device"),
+            manufacturer="Google",
+            model=device_info.get("model", device_type_str),
+        )
 
     @property
     def source_type(self) -> SourceType:
@@ -126,7 +128,6 @@ class GoogleFindDeviceTracker(CoordinatorEntity, TrackerEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
         if self.coordinator.data and self._device_id in self.coordinator.data:
             self._device_info = self.coordinator.data[self._device_id]
         self.async_write_ha_state()

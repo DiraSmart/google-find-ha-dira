@@ -1,10 +1,13 @@
 """Button platform for Google Find My Device - Ring and Locate actions."""
 
+from __future__ import annotations
+
 import logging
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -26,19 +29,14 @@ async def async_setup_entry(
     if coordinator.data:
         for device_id, device_info in coordinator.data.items():
             device_type = device_info.get("device_type", 1)
-            entities.append(
-                GoogleFindDeviceRingButton(coordinator, device_id, device_info, device_type)
-            )
-            entities.append(
-                GoogleFindDeviceStopSoundButton(coordinator, device_id, device_info, device_type)
-            )
-            entities.append(
-                GoogleFindDeviceLocateButton(coordinator, device_id, device_info, device_type)
-            )
+            entities.extend([
+                GoogleFindDeviceRingButton(coordinator, device_id, device_info, device_type),
+                GoogleFindDeviceStopSoundButton(coordinator, device_id, device_info, device_type),
+                GoogleFindDeviceLocateButton(coordinator, device_id, device_info, device_type),
+            ])
 
     async_add_entities(entities, True)
 
-    # Track new devices
     known_devices = set(coordinator.data.keys()) if coordinator.data else set()
 
     @callback
@@ -50,12 +48,12 @@ async def async_setup_entry(
         if new_devices:
             new_entities = []
             for device_id in new_devices:
-                device_info = coordinator.data[device_id]
-                device_type = device_info.get("device_type", 1)
+                info = coordinator.data[device_id]
+                dt = info.get("device_type", 1)
                 new_entities.extend([
-                    GoogleFindDeviceRingButton(coordinator, device_id, device_info, device_type),
-                    GoogleFindDeviceStopSoundButton(coordinator, device_id, device_info, device_type),
-                    GoogleFindDeviceLocateButton(coordinator, device_id, device_info, device_type),
+                    GoogleFindDeviceRingButton(coordinator, device_id, info, dt),
+                    GoogleFindDeviceStopSoundButton(coordinator, device_id, info, dt),
+                    GoogleFindDeviceLocateButton(coordinator, device_id, info, dt),
                 ])
                 known_devices.add(device_id)
 
@@ -71,24 +69,18 @@ class GoogleFindDeviceRingButton(CoordinatorEntity, ButtonEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:bell-ring"
 
-    def __init__(self, coordinator, device_id, device_info, device_type):
+    def __init__(self, coordinator, device_id, device_info, device_type) -> None:
         super().__init__(coordinator)
         self._device_id = device_id
         self._device_type = device_type
         self._attr_unique_id = f"google_find_{device_id}_ring"
         self._attr_name = f"{device_info.get('name', 'Device')} - Ring"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device_id)},
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+        )
 
     async def async_press(self) -> None:
-        """Ring the device."""
-        _LOGGER.info("Ringing device %s", self._device_id)
-        success = await self.coordinator.async_ring_device(
-            self._device_id, self._device_type
-        )
-        if not success:
-            _LOGGER.warning("Failed to ring device %s", self._device_id)
+        await self.coordinator.async_ring_device(self._device_id, self._device_type)
 
 
 class GoogleFindDeviceStopSoundButton(CoordinatorEntity, ButtonEntity):
@@ -97,24 +89,18 @@ class GoogleFindDeviceStopSoundButton(CoordinatorEntity, ButtonEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:bell-off"
 
-    def __init__(self, coordinator, device_id, device_info, device_type):
+    def __init__(self, coordinator, device_id, device_info, device_type) -> None:
         super().__init__(coordinator)
         self._device_id = device_id
         self._device_type = device_type
         self._attr_unique_id = f"google_find_{device_id}_stop_sound"
         self._attr_name = f"{device_info.get('name', 'Device')} - Stop Sound"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device_id)},
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+        )
 
     async def async_press(self) -> None:
-        """Stop sound on the device."""
-        _LOGGER.info("Stopping sound on device %s", self._device_id)
-        success = await self.coordinator.async_stop_sound(
-            self._device_id, self._device_type
-        )
-        if not success:
-            _LOGGER.warning("Failed to stop sound on device %s", self._device_id)
+        await self.coordinator.async_stop_sound(self._device_id, self._device_type)
 
 
 class GoogleFindDeviceLocateButton(CoordinatorEntity, ButtonEntity):
@@ -123,21 +109,15 @@ class GoogleFindDeviceLocateButton(CoordinatorEntity, ButtonEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:crosshairs-gps"
 
-    def __init__(self, coordinator, device_id, device_info, device_type):
+    def __init__(self, coordinator, device_id, device_info, device_type) -> None:
         super().__init__(coordinator)
         self._device_id = device_id
         self._device_type = device_type
         self._attr_unique_id = f"google_find_{device_id}_locate"
         self._attr_name = f"{device_info.get('name', 'Device')} - Locate"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device_id)},
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+        )
 
     async def async_press(self) -> None:
-        """Request fresh location for the device."""
-        _LOGGER.info("Requesting location for device %s", self._device_id)
-        success = await self.coordinator.async_locate_device(
-            self._device_id, self._device_type
-        )
-        if not success:
-            _LOGGER.warning("Failed to locate device %s", self._device_id)
+        await self.coordinator.async_locate_device(self._device_id, self._device_type)
