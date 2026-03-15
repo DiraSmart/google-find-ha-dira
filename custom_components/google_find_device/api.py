@@ -1,6 +1,6 @@
 """Google Find My Device API client.
 
-Handles authentication (GCM checkin + gpsoauth) and Nova API calls
+Handles authentication (GCM checkin + Google auth) and Nova API calls
 for listing devices, ringing, and locating.
 """
 
@@ -19,20 +19,17 @@ from .const import (
     ADM_SERVICE,
     GCM_CHECKIN_URL,
     GCM_REGISTER_URL,
-    GMS_CERT_SHA1,
-    GMS_PACKAGE,
     NOVA_EXECUTE_ACTION,
     NOVA_HEADERS_BASE,
     NOVA_LIST_DEVICES,
 )
+from .google_auth import perform_master_login, perform_oauth
 from .proto import (
     build_checkin_request,
     build_execute_action_request,
     build_list_devices_request,
     decode_protobuf,
     decode_recursive,
-    get_field,
-    get_field_list,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,7 +46,7 @@ class APIError(Exception):
 class GoogleFindDeviceAPI:
     """Client for Google Find My Device using Nova API."""
 
-    def __init__(self, email: str, app_password: str):
+    def __init__(self, email: str, app_password: str) -> None:
         self.email = email
         self.app_password = app_password
         self.android_id: int | None = None
@@ -65,8 +62,8 @@ class GoogleFindDeviceAPI:
 
         1. GCM checkin -> android_id + security_token
         2. GCM register -> gcm_token (for receiving push responses)
-        3. gpsoauth master login -> master_token
-        4. gpsoauth oauth -> ADM bearer token
+        3. Master login -> master_token
+        4. OAuth -> ADM bearer token
         """
         _LOGGER.debug("Starting authentication flow for %s", self.email)
 
@@ -84,17 +81,13 @@ class GoogleFindDeviceAPI:
             )
             self.gcm_token = ""
 
-        # Step 3 & 4: gpsoauth
-        await self._get_adm_token(hass)
+        # Step 3 & 4: Google auth
+        await self._get_adm_token()
         _LOGGER.info("Authentication successful for %s", self.email)
         return True
 
-    async def _gcm_checkin(self):
-        """Perform GCM checkin to get android_id and security_token.
-
-        This uses the OLD GCM protocol (not Firebase Installations),
-        which is more stable and not blocked by Google.
-        """
+    async def _gcm_checkin(self) -> None:
+        """Perform GCM checkin to get android_id and security_token."""
         checkin_data = build_checkin_request()
 
         async with aiohttp.ClientSession() as session:
@@ -108,13 +101,10 @@ class GoogleFindDeviceAPI:
                     raise AuthenticationError(
                         f"GCM checkin failed (HTTP {resp.status}): {text}"
                     )
-
                 response_data = await resp.read()
 
-        # Parse the checkin response protobuf
         fields = decode_protobuf(response_data)
 
-        # android_id is in field 7 (can be varint or fixed64)
         android_id_values = fields.get(7, [])
         if not android_id_values:
             raise AuthenticationError(
@@ -122,7 +112,6 @@ class GoogleFindDeviceAPI:
             )
         self.android_id = android_id_values[0]
 
-        # security_token is in field 11
         security_token_values = fields.get(11, [])
         if not security_token_values:
             raise AuthenticationError(
@@ -130,7 +119,7 @@ class GoogleFindDeviceAPI:
             )
         self.security_token = security_token_values[0]
 
-    async def _gcm_register(self):
+    async def _gcm_register(self) -> None:
         """Register with GCM to get a registration token for push notifications."""
         if not self.android_id or not self.security_token:
             raise AuthenticationError("Must call _gcm_checkin first")
@@ -163,7 +152,6 @@ class GoogleFindDeviceAPI:
                     raise AuthenticationError(
                         f"GCM registration failed (HTTP {resp.status}): {text}"
                     )
-
                 response_text = await resp.text()
 
         if response_text.startswith("token="):
@@ -171,23 +159,15 @@ class GoogleFindDeviceAPI:
         elif "Error" in response_text:
             raise AuthenticationError(f"GCM registration error: {response_text}")
         else:
-            _LOGGER.warning("Unexpected GCM registration response: %s", response_text)
+            _LOGGER.warning("Unexpected GCM response: %s", response_text)
             self.gcm_token = ""
 
-    async def _get_adm_token(self, hass):
-        """Get Android Device Manager OAuth token using gpsoauth."""
-        try:
-            from gpsoauth import perform_master_login, perform_oauth
-        except ImportError as err:
-            raise AuthenticationError(
-                "gpsoauth library not installed. Check manifest.json requirements."
-            ) from err
-
+    async def _get_adm_token(self) -> None:
+        """Get Android Device Manager OAuth token."""
         android_id_hex = format(self.android_id, "x")
 
-        # Step 3: Master login
-        master_resp = await hass.async_add_executor_job(
-            perform_master_login,
+        # Master login
+        master_resp = await perform_master_login(
             self.email,
             self.app_password,
             android_id_hex,
@@ -195,15 +175,13 @@ class GoogleFindDeviceAPI:
 
         if "Token" not in master_resp:
             error = master_resp.get("Error", "Unknown error")
-            _LOGGER.error("Master login failed: %s", master_resp)
             raise AuthenticationError(f"Google login failed: {error}")
 
         self.master_token = master_resp["Token"]
         _LOGGER.debug("Master login successful")
 
-        # Step 4: Get ADM service token
-        oauth_resp = await hass.async_add_executor_job(
-            perform_oauth,
+        # Get ADM service token
+        oauth_resp = await perform_oauth(
             self.email,
             self.master_token,
             android_id_hex,
@@ -214,19 +192,18 @@ class GoogleFindDeviceAPI:
 
         if "Auth" not in oauth_resp:
             error = oauth_resp.get("Error", "Unknown error")
-            _LOGGER.error("OAuth failed: %s", oauth_resp)
             raise AuthenticationError(f"Failed to get ADM token: {error}")
 
         self.adm_token = oauth_resp["Auth"]
-        self.token_expiry = time.time() + 3500  # Tokens last ~1 hour
+        self.token_expiry = time.time() + 3500
 
-    async def refresh_token_if_needed(self, hass):
-        """Refresh the ADM token if it's expired or about to expire."""
+    async def refresh_token_if_needed(self, hass) -> None:
+        """Refresh the ADM token if expired."""
         if time.time() > self.token_expiry:
             _LOGGER.debug("ADM token expired, refreshing...")
-            await self._get_adm_token(hass)
+            await self._get_adm_token()
 
-    def _nova_headers(self):
+    def _nova_headers(self) -> dict:
         """Get headers for Nova API requests."""
         headers = dict(NOVA_HEADERS_BASE)
         headers["Authorization"] = f"Bearer {self.adm_token}"
@@ -249,21 +226,15 @@ class GoogleFindDeviceAPI:
                     raise APIError(
                         f"Nova API error (HTTP {resp.status}): {text}"
                     )
-
                 response_hex = await resp.text()
 
         try:
             return binascii.unhexlify(response_hex.strip())
         except (ValueError, binascii.Error):
-            # Response might be binary, not hex
-            return await resp.read()
+            return response_hex.encode()
 
     async def list_devices(self, hass) -> dict:
-        """List all devices via Nova API.
-
-        Returns a dict of {device_id: device_info}.
-        Requests both Android devices and Spot devices.
-        """
+        """List all devices via Nova API."""
         await self.refresh_token_if_needed(hass)
 
         all_devices = {}
@@ -302,7 +273,6 @@ class GoogleFindDeviceAPI:
             _LOGGER.warning("Failed to decode device list response")
             return devices
 
-        # DevicesList has repeated DeviceMetadata in field 2
         device_entries = decoded.get(2, [])
         if not isinstance(device_entries, list):
             device_entries = [device_entries]
@@ -331,35 +301,26 @@ class GoogleFindDeviceAPI:
             "last_update": None,
         }
 
-        # Try to extract device name (commonly field 2 for userDefinedDeviceName)
-        name = self._find_string_field(entry, "name")
+        name = self._find_string_field(entry)
         if name:
             device_info["name"] = name
 
-        # Try to extract canonical ID (commonly in identifierInformation)
         device_id = self._find_device_id(entry)
         if device_id:
             device_info["id"] = device_id
 
-        # Try to extract location data
         location = self._find_location(entry)
         if location:
             device_info.update(location)
 
-        # Try to extract model info
-        model = self._find_string_field(entry, "model")
-        if model:
-            device_info["model"] = model
-
-        # Log the raw structure for debugging if we couldn't parse essential fields
         if not device_info["id"]:
             _LOGGER.debug("Could not extract device ID from entry: %s", entry)
 
         return device_info
 
-    def _find_string_field(self, data: dict, hint: str) -> str | None:
+    def _find_string_field(self, data: dict) -> str | None:
         """Search for a string field in the protobuf data."""
-        for field_num, value in data.items():
+        for value in data.values():
             if isinstance(value, str) and len(value) > 1:
                 return value
             if isinstance(value, list):
@@ -370,15 +331,12 @@ class GoogleFindDeviceAPI:
 
     def _find_device_id(self, data: dict) -> str | None:
         """Extract the canonical device ID from a DeviceMetadata entry."""
-        # The ID is typically in identifierInformation -> canonicIds -> canonicId -> id
-        # We search recursively for a field that looks like a canonical ID
 
         def _search(d, depth=0):
             if depth > 6 or not isinstance(d, dict):
                 return None
-            for field_num, value in d.items():
+            for value in d.values():
                 if isinstance(value, str):
-                    # Canonical IDs are typically long alphanumeric strings
                     if len(value) > 10 and not value.startswith("http"):
                         return value
                 elif isinstance(value, dict):
@@ -398,20 +356,12 @@ class GoogleFindDeviceAPI:
         return _search(data)
 
     def _find_location(self, data: dict) -> dict | None:
-        """Extract location data from device metadata.
-
-        Looks for latitude/longitude in various protobuf structures.
-        Handles both encrypted and potentially unencrypted locations.
-        """
-        # Location data might be in various nested fields
-        # For unencrypted locations, look for sfixed32 pairs (lat/lon as int * 1e7)
-        # For now, try to find any numeric values that look like coordinates
+        """Extract location data from device metadata."""
 
         def _search_location(d, depth=0):
             if depth > 8 or not isinstance(d, dict):
                 return None
 
-            # Check if this dict has fields 1 and 2 with coordinate-like values
             f1 = d.get(1)
             f2 = d.get(2)
             f3 = d.get(3)
@@ -420,20 +370,17 @@ class GoogleFindDeviceAPI:
                 lat = f1
                 lon = f2
 
-                # Check if these are raw coordinates (e.g., from sfixed32 * 1e7)
-                if abs(lat) > 1000000:  # Likely in 1e7 format
+                if abs(lat) > 1000000:
                     lat = lat / 1e7
                     lon = lon / 1e7
 
-                # Validate coordinate ranges
                 if -90 <= lat <= 90 and -180 <= lon <= 180:
                     result = {"latitude": lat, "longitude": lon}
                     if isinstance(f3, (int, float)):
                         result["accuracy"] = f3
                     return result
 
-            # Recurse into sub-messages
-            for field_num, value in d.items():
+            for value in d.values():
                 if isinstance(value, dict):
                     result = _search_location(value, depth + 1)
                     if result:
