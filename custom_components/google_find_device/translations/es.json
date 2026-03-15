@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Google Find My Device",
+        "description": "Ingresa las credenciales de tu cuenta Google. Necesitas una Contrase\u00f1a de Aplicaci\u00f3n (no tu contrase\u00f1a normal). Ve a myaccount.google.com > Seguridad > Verificaci\u00f3n en 2 pasos > Contrase\u00f1as de aplicaciones para crear una.",
+        "data": {
+          "email": "Correo de Google",
+          "app_password": "Contrase\u00f1a de Aplicaci\u00f3n",
+          "poll_interval": "Intervalo de actualizaci\u00f3n (segundos)"
+        },
+        "data_description": {
+          "email": "Tu direcci\u00f3n de correo de Google",
+          "app_password": "Contrase\u00f1a espec\u00edfica de aplicaci\u00f3n generada desde tu cuenta Google",
+          "poll_interval": "Cada cu\u00e1nto actualizar la ubicaci\u00f3n de los dispositivos (60-3600 segundos)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Credenciales inv\u00e1lidas. Aseg\u00farate de usar una Contrase\u00f1a de Aplicaci\u00f3n, no tu contrase\u00f1a normal.",
+      "unknown": "Ocurri\u00f3 un error inesperado. Revisa los logs de Home Assistant para m\u00e1s detalles."
+    },
+    "abort": {
+      "already_configured": "Esta cuenta de Google ya est\u00e1 configurada."
+    }
+  }
+}

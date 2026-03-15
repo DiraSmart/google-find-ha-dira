@@ -1,0 +1,11 @@
+{
+  "domain": "google_find_device",
+  "name": "Google Find My Device",
+  "version": "1.0.0",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "",
+  "iot_class": "cloud_polling",
+  "requirements": ["gpsoauth==1.0.4"]
+}
